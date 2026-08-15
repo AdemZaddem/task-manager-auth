@@ -4,6 +4,7 @@ import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { JwtPayload } from './types/jwt-payload.type';
 
 @Injectable()
 export class AuthService {
@@ -31,8 +32,39 @@ export class AuthService {
     if (!existingEmail) throw new UnauthorizedException('Invalid credentials');
     const isMatch = await bcrypt.compare(user.password, existingEmail.password);
     if (!isMatch) throw new UnauthorizedException('Invalid credentials');
-    const payload = { sub: existingEmail.id, email: existingEmail.email, role: existingEmail.role };
-    const accessToken = this.jwtService.sign(payload)
-    return {accessToken}
+    const payload: JwtPayload = { sub: existingEmail.id, email: existingEmail.email, role: existingEmail.role };
+    const accessToken = this.jwtService.sign(payload);
+
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_REFRESH_SECRET,
+      expiresIn: '7d',
+    });
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    await this.prisma.user.update({ where: { id: existingEmail.id }, data: { hashedRefreshToken } });
+    return { accessToken, refreshToken };
+  }
+
+  async refreshAccessToken(userId: number, refreshToken: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.hashedRefreshToken) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    const isMatch = await bcrypt.compare(refreshToken, user.hashedRefreshToken);
+    if (!isMatch) throw new UnauthorizedException('Access denied');
+
+    const payload: JwtPayload = { sub: userId, email: user.email, role: user.role };
+    const newAccessToken = this.jwtService.sign(payload);
+
+    return { accessToken: newAccessToken };
+  }
+
+  async logout(userId: number) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { hashedRefreshToken: null },
+    });
+
+    return { message: 'User loged out' };
   }
 }

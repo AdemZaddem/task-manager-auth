@@ -12,7 +12,7 @@ export class JwtService extends PassportStrategy(Strategy) {
       secretOrKey: process.env.JWT_ACCESS_SECRET!,
     });
   }
-  validate(payload: JwtPayload) {
-    return { userId: payload.sub, email: payload.email, role: payload.role };
+  validate(payload: JwtPayload):JwtPayload {
+    return payload
   }
 }

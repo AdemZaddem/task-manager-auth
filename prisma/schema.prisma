@@ -23,6 +23,7 @@ model User {
   password String
   role     Role   @default(USER)
   tasks    Task[]
+  hashedRefreshToken String?
 }
 
 model Task {
